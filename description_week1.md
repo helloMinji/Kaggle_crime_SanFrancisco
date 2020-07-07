@@ -71,8 +71,8 @@ sns.countplot(data=train, x="Dates-hour", ax=ax4)
 sns.countplot(data=train, x="Dates-minute", ax=ax5)
 sns.countplot(data=train, x="Dates-second", ax=ax6)
 ```
-![image](https://github.com/helloMinji/Kaggle_crime_SanFrancisco/issues/1#issuecomment-654604951)   
-**시각화 결과해석**     
+![week1_01](https://user-images.githubusercontent.com/41939828/86716055-c9e4e680-c05b-11ea-888e-227a99e4ed0f.JPG)   
+**> 시각화 결과해석**     
 분, 초, 일(31일을 제외하면)은 범죄의 발생빈도를 판가름하는데 별 영향이 없다.     
 **시간**은 범죄 발생빈도에 큰 영향이 있다.
 </br>
@@ -85,7 +85,9 @@ sns.countplot(data=train, x="Dates-second", ax=ax6)
 sns.lmplot(data=train, x="X", y="Y", fit_reg = False)
 ```
 - fit_reg: 추세선 여부(True,False)
-![image](https://github.com/helloMinji/Kaggle_crime_SanFrancisco/issues/1#issuecomment-654605022)        
+</br>
+
+![week1_02](https://user-images.githubusercontent.com/41939828/86716079-d10bf480-c05b-11ea-8165-6786d2be77b0.JPG)        
 
 outlier :     
 오른쪽 위에 한 점으로 몰려있는 것으로 보아, 경도와 위도가 가장 높은 값이 outlier일 것으로 예상
@@ -102,4 +104,4 @@ non_outliers = train[~(X_outliers & Y_outliers)]
 
 sns.lmplot(data=non_outliers, x="X", y="Y", fit_reg=False)
 ```
-![image](https://github.com/helloMinji/Kaggle_crime_SanFrancisco/issues/1#issuecomment-654605077)     
+![week1_03](https://user-images.githubusercontent.com/41939828/86716103-d6693f00-c05b-11ea-8fbe-f36ec4aef4b8.JPG)           
