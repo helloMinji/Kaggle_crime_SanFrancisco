@@ -130,6 +130,11 @@ test["Dates-hour"] = test["Dates"].dt.hour
 test["Dates-minute"] = test["Dates"].dt.minute
 test["Dates-second"] = test["Dates"].dt.second
 
+# 분에서 30을 뺀 후 절댓값
+train["Dates-minute(abs)"] = np.abs(train["Dates-minute"]-30)
+test["Dates-minute(abs)"] = np.abs(test["Dates-minute"]-30)
+
+
 ## DayOfWeek
 # one hot encoding
 train_dayofweek = pd.get_dummies(train["DayOfWeek"], prefix = "DayOfWeek")
@@ -151,11 +156,47 @@ test = pd.concat([test, test_pddistrict], axis = 1)
 train["Crossroad"] = train["Address"].str.contains("/")     # 특정 문자가 포함되는지 확인
 test["Crossroad"] = test["Address"].str.contains("/")
 
+# crossroad 순서 통일
+def clean_address(address):
+    if "/" not in address:
+        return address
+
+    address1, address2 = address.split("/")
+    address1, address2 = address1.strip(), address2.strip()    # 공백 제거
+
+    if address1<address2:
+        address = "{} / {}".format(address1, address2)
+    else:
+        address = "{} / {}".format(address2, address1)
+
+    return address
+
+train["Address(clean)"] = train["Address"].apply(clean_address)
+test["Address(clean)"] = test["Address"].apply(clean_address)
+
+# 발생횟수가 작은 주소에 대해 Others 처리
+address_counts = train["Address(clean)"].value_counts()
+
+top_address_counts = address_counts[address_counts >= 100]
+top_address_counts = top_address_counts.index
+
+train.loc[~train["Address(clean)"].isin(top_address_counts), "Address(clean)"] = "Others"
+test.loc[~test["Address(clean)"].isin(top_address_counts), "Address(clean)"] = "Others"
+
+# one-hot encoding -> CSR Matrix
+train_address = pd.get_dummies(train["Address(clean)"])
+test_address = pd.get_dummies(test["Address(clean)"])
+
+from scipy.sparse import csr_matrix
+train_address = csr_matrix(train_address)
+test_address = csr_matrix(test_address)
+train.head()
+
 
 
 
 ### Train
-feature_names = ["X", "Y", "Dates-year", "Dates-month", "Dates-day", "Dates-hour", "Dates-minute", "Dates-second"]
+feature_names = ["X", "Y", "Dates-year", "Dates-month", "Dates-day", "Dates-hour", "Dates-minute(abs)", "Dates-second"]
 feature_names = feature_names + list(train_dayofweek.columns)
 feature_names = feature_names + list(train_pddistrict.columns)
 label_name = "Category"
@@ -163,6 +204,137 @@ label_name = "Category"
 X_train = train[feature_names]
 X_test = test[feature_names]
 y_train = train[label_name]
+
+# CSR Matrix 합치기 - hstack
+from scipy.sparse import hstack
+
+X_train = hstack([X_train.astype('float'), train_address])
+X_train = csr_matrix(X_train)
+X_test = hstack([X_test.astype('float'), test_address])
+X_test = csr_matrix(X_test)
+
+
+
+
+### Hyperparameter Tuning
+from lightgbm import LGBMClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import log_loss
+
+# Coarse Search
+X_train_kf, X_test_kf, y_train_kf, y_test_kf = \
+    train_test_split(X_train, y_train, test_size = 0.3, random_state = 37)
+n_estimators = 100
+num_loop = 100
+early_stopping_rounds = 20
+
+coarse_hyperparameters_list = []
+
+for loop in range(num_loop):
+    learning_rate = 10 ** np.random.uniform(low = -10, high = 1)
+    num_leaves = np.random.randint(2, 500)
+    max_bin = np.random.randint(2, 500)
+    min_child_samples = np.random.randint(2, 500) 
+    subsample = np.random.uniform(low = 0.1, high = 1.0)
+    colsample_bytree = np.random.uniform(low = 0.1, high = 1.0)
+
+    model = LGBMClassifier(n_estimators = n_estimators,
+                           learning_rate = learning_rate,
+                           num_leaves = num_leaves,
+                           max_bin = max_bin,
+                           min_child_samples = min_child_samples,
+                           subsample = subsample,
+                           subsample_freq = 1,
+                           colsample_bytree = colsample_bytree,
+                           class_type = 'balanced',
+                           random_state = 37)
+
+    model.fit(X_train_kf, y_train_kf,
+              eval_set = [(X_test_kf, y_test_kf)],
+              verbose = 0,
+              early_stopping_rounds = early_stopping_rounds)
+
+    best_iteration = model.best_iteration_
+    score = model.best_score_['valid_0']['multi_logloss']
+
+    coarse_hyperparameters_list.append({
+        'loop': loop,
+        'n_estimators': best_iteration,
+        'learning_rate': learning_rate,
+        'num_leaves': num_leaves,
+        'max_bin': max_bin,
+        'min_child_samples': min_child_samples,
+        'subsample': subsample,
+        'subsample_freq': 1,
+        'colsample_bytree': colsample_bytree,
+        'class_type': 'balanced',
+        'random_state': 37,
+        'score': score,
+    })
+
+    print(f"{loop:2} best iteration = {best_iteration} Score = {score:.5f}")
+
+coarse_hyperparameters_list = pd.DataFrame(coarse_hyperparameters_list)
+coarse_hyperparameters_list = coarse_hyperparameters_list.sort_values(by = "score")
+coarse_hyperparameters_list.head()
+
+
+# Finer Search (coarse와 앞부분 동일)
+finer_hyperparameters_list = []
+
+for loop in range(num_loop):
+    # coarse search에서 찾은 값
+    learning_rate = np.random.uniform(low = 0.025100, high = 0.030819)
+    num_leaves = np.random.randint(158, 278)
+    max_bin = np.random.randint(173, 418)
+    min_child_samples = np.random.randint(228, 448) 
+    subsample = np.random.uniform(low = 0.504958, high = 0.901055)
+    colsample_bytree = np.random.uniform(low = 0.860466, high = 0.989937)
+
+    model = LGBMClassifier(n_estimators = n_estimators,
+                           learning_rate = learning_rate,
+                           num_leaves = num_leaves,
+                           max_bin = max_bin,
+                           min_child_samples = min_child_samples,
+                           subsample = subsample,
+                           subsample_freq = 1,
+                           colsample_bytree = colsample_bytree,
+                           class_type = 'balanced',
+                           random_state = 37)
+
+    model.fit(X_train_kf, y_train_kf,
+              eval_set = [(X_test_kf, y_test_kf)],
+              verbose = 0,
+              early_stopping_rounds = early_stopping_rounds)
+
+    best_iteration = model.best_iteration_
+    score = model.best_score_['valid_0']['multi_logloss']
+
+    finer_hyperparameters_list.append({
+        'loop': loop,
+        'n_estimators': best_iteration,
+        'learning_rate': learning_rate,
+        'num_leaves': num_leaves,
+        'max_bin': max_bin,
+        'min_child_samples': min_child_samples,
+        'subsample': subsample,
+        'subsample_freq': 1,
+        'colsample_bytree': colsample_bytree,
+        'class_type': 'balanced',
+        'random_state': 37,
+        'score': score,
+    })
+
+    print(f"{loop:2} best iteration = {best_iteration} Score = {score:.5f}")   
+
+finer_hyperparameters_list = pd.DataFrame(finer_hyperparameters_list)
+finer_hyperparameters_list = finer_hyperparameters_list.sort_values(by = "score")
+finer_hyperparameters_list.head()
+
+best_hyperparameters = finer_hyperparameters_list.iloc[0]
+
+
+
 
 # Random Forest
 from sklearn.ensemble import RandomForestClassifier
@@ -178,8 +350,17 @@ import lightgbm as lgb
 from lightgbm import LGBMModel,LGBMClassifier
 from sklearn import metrics
 
-Lgb = LGBMClassifier(n_estimators=10,
-                    random_state=37)
+# best hyperparameter 적용
+Lgb = LGBMClassifier(n_estimators = best_hyperparameters['n_estimators'],
+                       learning_rate = best_hyperparameters['learning_rate'],
+                       num_leaves = best_hyperparameters['num_leaves'],
+                       max_bin = best_hyperparameters['max_bin'],
+                       min_child_samples = best_hyperparameters['min_child_samples'],
+                       subsample = best_hyperparameters['subsample'],
+                       subsample_freq = best_hyperparameters['subsample_freq'],
+                       colsample_bytree = best_hyperparameters['colsample_bytree'],
+                       class_type = best_hyperparameters['class_type'],
+                       random_state = best_hyperparameters['random_state'])
 
 
 
