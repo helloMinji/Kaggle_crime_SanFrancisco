@@ -104,6 +104,14 @@ for row in range(10):
 
             ax.set(xlabel = category)
 
+            
+## Address
+train["Crossroad"] = train["Address"].str.contains("/")
+sns.countplot(data=train, x="Crossroad")
+
+plt.figure(figsize = (18, 64))
+sns.countplot(data=train, hue="Crossroad", y="Category")
+
 
 
 
@@ -113,20 +121,43 @@ test = pd.read_csv("test.csv", index_col = "Id")
 
 ## Dates
 # train은 이미 진행함
-test["Dates"] = pd.to_datetime(train["Dates"])
+test["Dates"] = pd.to_datetime(test["Dates"])
 
-train["Dates-year"] = train["Dates"].dt.year
-train["Dates-month"] = train["Dates"].dt.month
-train["Dates-day"] = train["Dates"].dt.day
-train["Dates-hour"] = train["Dates"].dt.hour
-train["Dates-minute"] = train["Dates"].dt.minute
-train["Dates-second"] = train["Dates"].dt.second
+test["Dates-year"] = test["Dates"].dt.year
+test["Dates-month"] = test["Dates"].dt.month
+test["Dates-day"] = test["Dates"].dt.day
+test["Dates-hour"] = test["Dates"].dt.hour
+test["Dates-minute"] = test["Dates"].dt.minute
+test["Dates-second"] = test["Dates"].dt.second
+
+## DayOfWeek
+# one hot encoding
+train_dayofweek = pd.get_dummies(train["DayOfWeek"], prefix = "DayOfWeek")
+train = pd.concat([train, train_dayofweek], axis = 1)
+
+test_dayofweek = pd.get_dummies(test["DayOfWeek"], prefix = "DayOfWeek")
+test = pd.concat([test, test_dayofweek], axis = 1)
+
+
+## PdDistrict
+train_pddistrict = pd.get_dummies(train["PdDistrict"], prefix = "PdDistrict")
+train = pd.concat([train, train_pddistrict], axis = 1)
+
+test_pddistrict = pd.get_dummies(test["PdDistrict"], prefix = "PdDistrict")
+test = pd.concat([test, test_pddistrict], axis = 1)
+
+
+## Crossroad
+train["Crossroad"] = train["Address"].str.contains("/")     # 특정 문자가 포함되는지 확인
+test["Crossroad"] = test["Address"].str.contains("/")
 
 
 
 
 ### Train
 feature_names = ["X", "Y", "Dates-year", "Dates-month", "Dates-day", "Dates-hour", "Dates-minute", "Dates-second"]
+feature_names = feature_names + list(train_dayofweek.columns)
+feature_names = feature_names + list(train_pddistrict.columns)
 label_name = "Category"
 
 X_train = train[feature_names]
@@ -147,12 +178,8 @@ import lightgbm as lgb
 from lightgbm import LGBMModel,LGBMClassifier
 from sklearn import metrics
 
-Lgb = LGBMClassifier(n_estimators=90,
-                    silent=False,
-                    random_state=37,
-                    max_depth=5,
-                    num_leaves=31,
-                    metrics='auc')
+Lgb = LGBMClassifier(n_estimators=10,
+                    random_state=37)
 
 
 
