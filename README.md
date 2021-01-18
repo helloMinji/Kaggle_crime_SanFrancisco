@@ -13,6 +13,7 @@ Sunset에서 SOMA까지, Marina에서 Excelsior까지, 이 경쟁사의 데이�
 
 **ㅡDS School 온라인 심화반 학습내용**
 </br>     
+</br>     
 
 ### 설치
 1. 저장소 전체를 zip 파일로 다운로드하거나 오른쪽 코드를 터미널에서 실행 ```git clone https://github.com/helloMinji/Kaggle_crime_SanFrancisco.git```
