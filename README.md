@@ -45,4 +45,5 @@ Sunset에서 SOMA까지, Marina에서 Excelsior까지, 이 경쟁사의 데이�
 - 로컬에서 결과를 평가하기위한 log_loss 계산
 - 결과를 제출용 파일로 출력
 </br>                 
-분석 과정에 대한 자세한 내용은 [EDA](https://hellominji.tistory.com/42?category=735482)를 참고하세요.
+
+분석 과정에 대한 자세한 내용은 [EDA](https://hellominji.tistory.com/42)와 [분석](https://hellominji.tistory.com/43)을 참고하세요.
